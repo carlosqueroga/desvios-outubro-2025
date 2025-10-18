@@ -1,0 +1,170 @@
+# Gerando dashboard HTML interativo com filtros, gráficos e exportação
+
+import pandas as pd
+import os
+
+# Caminho do arquivo CSV
+csv_path = "/mnt/data/glpi (3).csv"
+
+# Leitura do CSV com separador ';'
+df = pd.read_csv(csv_path, sep=';', encoding='utf-8')
+
+# Selecionar colunas relevantes
+df_filtered = df[[
+    'ID', 'Título', 'Data de abertura', 'Status', 'Categoria',
+    'Localização', 'Requerente - Requerente', 'Atribuído para gerentes - Técnico'
+]].copy()
+
+# Renomear colunas para facilitar uso no HTML
+df_filtered.columns = [
+    'ID', 'Título', 'DataAbertura', 'Status', 'Categoria',
+    'Localizacao', 'Requerente', 'Tecnico'
+]
+
+# Contagem por categoria e status para gráficos
+categoria_counts = df_filtered['Categoria'].value_counts().to_dict()
+status_counts = df_filtered['Status'].value_counts().to_dict()
+
+# Gerar HTML
+html_path = "/mnt/data/dashboard_chamados.html"
+with open(html_path, "w", encoding="utf-8") as f:
+    f.write(f"""
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard de Chamados GLPI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css" rel="stylesheet">
+    <style>
+        body {{ padding: 20px; }}
+        canvas {{ background: #fff; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Dashboard de Chamados GLPI</h1>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <label for="statusFilter">Filtrar por Status:</label>
+                <select id="statusFilter" class="form-select">
+                    <option value="">Todos</option>
+                    {''.join(f'<option value="{s}">{s}</option>' for s in sorted(df_filtered['Status'].dropna().unique()))}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="categoriaFilter">Filtrar por Categoria:</label>
+                <select id="categoriaFilter" class="form-select">
+                    <option value="">Todas</option>
+                    {''.join(f'<option value="{c}">{c}</option>' for c in sorted(df_filtered['Categoria'].dropna().unique()))}
+                </select>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <canvas id="barChart"></canvas>
+            </div>
+            <div class="col-md-6">
+                <canvas id="pieChart"></canvas>
+            </div>
+        </div>
+
+        <div class="mb-3 text-end">
+            <button id="exportBtn" class="btn btn-success">Exportar para Excel</button>
+        </div>
+
+        <table id="chamadosTable" class="display table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Título</th>
+                    <th>Data de abertura</th>
+                    <th>Status</th>
+                    <th>Categoria</th>
+                    <th>Localização</th>
+                    <th>Requerente</th>
+                    <th>Técnico</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(f"<tr><td>{row['ID']}</td><td>{row['Título']}</td><td>{row['DataAbertura']}</td><td>{row['Status']}</td><td>{row['Categoria']}</td><td>{row['Localizacao']}</td><td>{row['Requerente']}</td><td>{row['Tecnico']}</td></tr>" for _, row in df_filtered.iterrows())}
+            </tbody>
+        </table>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <script>
+        $(document).ready(function() {{
+            var table = $('#chamadosTable').DataTable();
+
+            $('#statusFilter, #categoriaFilter').on('change', function() {{
+                var status = $('#statusFilter').val();
+                var categoria = $('#categoriaFilter').val();
+
+                table.columns(3).search(status);
+                table.columns(4).search(categoria);
+                table.draw();
+            }});
+
+            $('#exportBtn').click(function() {{
+                var wb = XLSX.utils.table_to_book(document.getElementById('chamadosTable'), {{sheet:"Chamados"}});
+                XLSX.writeFile(wb, 'chamados_glpi.xlsx');
+            }});
+        }});
+
+        const barCtx = document.getElementById('barChart').getContext('2d');
+        new Chart(barCtx, {{
+            type: 'bar',
+            data: {{
+                labels: {list(categoria_counts.keys())},
+                datasets: [{{
+                    label: 'Chamados por Categoria',
+                    data: {list(categoria_counts.values())},
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)'
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                plugins: {{
+                    legend: {{ display: false }},
+                    title: {{ display: true, text: 'Chamados por Categoria' }}
+                }}
+            }}
+        }});
+
+        const pieCtx = document.getElementById('pieChart').getContext('2d');
+        new Chart(pieCtx, {{
+            type: 'pie',
+            data: {{
+                labels: {list(status_counts.keys())},
+                datasets: [{{
+                    label: 'Chamados por Status',
+                    data: {list(status_counts.values())},
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.6)',
+                        'rgba(255, 206, 86, 0.6)',
+                        'rgba(75, 192, 192, 0.6)',
+                        'rgba(153, 102, 255, 0.6)',
+                        'rgba(255, 159, 64, 0.6)'
+                    ]
+                }}]
+            }},
+            options: {{
+                responsive: true,
+                plugins: {{
+                    title: {{ display: true, text: 'Chamados por Status' }}
+                }}
+            }}
+        }});
+    </script>
+</body>
+</html>
+""")
+
+html_path
