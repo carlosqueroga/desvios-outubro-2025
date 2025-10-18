@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Dashboard de Chamados GLPI</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <h1 class="text-center mb-4">Dashboard de Chamados GLPI</h1>
+
+    <!-- Filtros -->
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <label for="statusFilter" class="form-label">Filtrar por Status:</label>
+        <select id="statusFilter" class="form-select">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label for="categoriaFilter" class="form-label">Filtrar por Categoria:</label>
+        <select id="categoriaFilter" class="form-select">
+          <option value="">Todas</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Gráficos -->
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <canvas id="barChart"></canvas>
+      </div>
+      <div class="col-md-6">
+        <canvas id="pieChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Botão de exportação -->
+    <div class="mb-3 text-end">
+      <button id="exportBtn" class="btn btn-success">Exportar para Excel</button>
+    </div>
+
+    <!-- Tabela -->
+    <table id="chamadosTable" class="table table-striped">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Título</th>
+          <th>Data de abertura</th>
+          <th>Status</th>
+          <th>Categoria</th>
+          <th>Localização</th>
+          <th>Requerente</th>
+          <th>Técnico</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Dados inseridos via script -->
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+
+  <script>
+    // Dados simulados (substitua por dados reais do CSV)
+    const chamados = [
+      {id: "25103", titulo: "Lâmpada queimada", data: "18/10/2025", status: "Processando", categoria: "Equipamento", local: "Logística Geral", requerente: "Fabiano", tecnico: "Felipe"},
+      {id: "24622", titulo: "Carrinhos quebrados", data: "15/09/2025", status: "Solucionado", categoria: "Equipamento", local: "Logística Geral", requerente: "Yasmim", tecnico: "Felipe"},
+      // Adicione mais dados conforme necessário
+    ];
+
+    // Preencher filtros
+    const statusSet = new Set(), categoriaSet = new Set();
+    chamados.forEach(c => {
+      statusSet.add(c.status);
+      categoriaSet.add(c.categoria);
+    });
+    statusSet.forEach(s => $("#statusFilter").append(`<option value="${s}">${s}</option>`));
+    categoriaSet.forEach(c => $("#categoriaFilter").append(`<option value="${c}">${c}</option>`));
+
+    // Preencher tabela
+    const table = $('#chamadosTable').DataTable();
+    function atualizarTabela() {
+      table.clear();
+      const status = $('#statusFilter').val();
+      const categoria = $('#categoriaFilter').val();
+      chamados.forEach(c => {
+        if ((status === "" || c.status === status) && (categoria === "" || c.categoria === categoria)) {
+          table.row.add([c.id, c.titulo, c.data, c.status, c.categoria, c.local, c.requerente, c.tecnico]);
+        }
+      });
+      table.draw();
+    }
+    atualizarTabela();
+    $('#statusFilter, #categoriaFilter').on('change', atualizarTabela);
+
+    // Gráficos
+    const categorias = [...categoriaSet];
+    const categoriaCounts = categorias.map(cat => chamados.filter(c => c.categoria === cat).length);
+    new Chart(document.getElementById('barChart'), {
+      type: 'bar',
+      data: {
+        labels: categorias,
+        datasets: [{ label: 'Chamados por Categoria', data: categoriaCounts, backgroundColor: 'steelblue' }]
+      }
+    });
+
+    const status = [...statusSet];
+    const statusCounts = status.map(st => chamados.filter(c => c.status === st).length);
+    new Chart(document.getElementById('pieChart'), {
+      type: 'pie',
+      data: {
+        labels: status,
+        datasets: [{ data: statusCounts, backgroundColor: ['#007bff','#28a745','#ffc107','#dc3545'] }]
+      }
+    });
+
+    // Exportar para Excel
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const ws = XLSX.utils.json_to_sheet(chamados);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Chamados");
+      XLSX.writeFile(wb, "dashboard_chamados.xlsx");
+    });
+  </script>
+</body>
+</html>
